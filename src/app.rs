@@ -1,28 +1,39 @@
 use eframe::{egui, epi};
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Output {
+    is_high: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Input;
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "persistence", serde(default))] // if we add new fields, give them default values when deserializing old state
-pub struct TemplateApp {
+pub struct DemoApp {
     // Example stuff:
-    label: String,
-
-    // this how you opt-out of serialization of a member
-    #[cfg_attr(feature = "persistence", serde(skip))]
-    value: f32,
+    inputs: Vec<Input>,
+    outputs: Vec<Output>,
 }
 
-impl Default for TemplateApp {
+impl DemoApp {
+    pub fn add_outputs(&mut self, outputs: &[Output]) {
+        self.outputs.extend_from_slice(outputs);
+    }
+}
+
+impl Default for DemoApp {
     fn default() -> Self {
         Self {
             // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
+            inputs: Vec::new(),
+            outputs: Vec::new(),
         }
     }
 }
 
-impl epi::App for TemplateApp {
+impl epi::App for DemoApp {
     fn name(&self) -> &str {
         "eframe template"
     }
@@ -52,7 +63,7 @@ impl epi::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::CtxRef, frame: &epi::Frame) {
-        let Self { label, value } = self;
+        let Self { inputs, outputs } = self;
 
         // Examples of how to create different panels and windows.
         // Pick whichever suits you.
@@ -70,40 +81,54 @@ impl epi::App for TemplateApp {
             });
         });
 
-        egui::SidePanel::left("side_panel").show(ctx, |ui| {
-            ui.heading("Side Panel");
+        // egui::SidePanel::left("side_panel").show(ctx, |ui| {
+        //     ui.heading("Side Panel");
 
-            ui.horizontal(|ui| {
-                ui.label("Write something: ");
-                ui.text_edit_singleline(label);
-            });
+        //     ui.horizontal(|ui| {
+        //         ui.label("Write something: ");
+        //         ui.text_edit_singleline(label);
+        //     });
 
-            ui.add(egui::Slider::new(value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                *value += 1.0;
-            }
+        //     ui.add(egui::Slider::new(value, 0.0..=10.0).text("value"));
+        //     if ui.button("Increment").clicked() {
+        //         *value += 1.0;
+        //     }
 
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label("powered by ");
-                    ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-                    ui.label(" and ");
-                    ui.hyperlink_to("eframe", "https://github.com/emilk/egui/tree/master/eframe");
-                });
-            });
-        });
+        //     ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
+        //         ui.horizontal(|ui| {
+        //             ui.spacing_mut().item_spacing.x = 0.0;
+        //             ui.label("powered by ");
+        //             ui.hyperlink_to("egui", "https://github.com/emilk/egui");
+        //             ui.label(" and ");
+        //             ui.hyperlink_to("eframe", "https://github.com/emilk/egui/tree/master/eframe");
+        //         });
+        //     });
+        // });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
-
-            ui.heading("eframe template");
-            ui.hyperlink("https://github.com/emilk/eframe_template");
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/master/",
-                "Source code."
-            ));
-            egui::warn_if_debug_build(ui);
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    if ui.button("Add Input").clicked() {
+                        inputs.push(Input);
+                    }
+                    for _input in inputs {
+                        ui.label("input");
+                    }
+                });
+                ui.vertical(|ui| {
+                    if ui.button("Add Output").clicked() {
+                        outputs.push(Output::default());
+                    }
+                    for (idx, out) in outputs.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.label(format!("pin {idx}"));
+                            toggle_ui_compact(ui, &mut out.is_high);
+                            ui.label(if out.is_high { "high" } else { "low" });
+                        });
+                    }
+                });
+            });
         });
 
         if false {
@@ -115,4 +140,29 @@ impl epi::App for TemplateApp {
             });
         }
     }
+}
+
+fn toggle_ui_compact(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
+    let desired_size = ui.spacing().interact_size.y * egui::vec2(2.0, 1.0);
+    let (rect, mut response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+    if response.clicked() {
+        *on = !*on;
+        response.mark_changed();
+    }
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, *on, ""));
+
+    if ui.is_rect_visible(rect) {
+        let how_on = ui.ctx().animate_bool(response.id, *on);
+        let visuals = ui.style().interact_selectable(&response, *on);
+        let rect = rect.expand(visuals.expansion);
+        let radius = 0.5 * rect.height();
+        ui.painter()
+            .rect(rect, radius, visuals.bg_fill, visuals.bg_stroke);
+        let circle_x = egui::lerp((rect.left() + radius)..=(rect.right() - radius), how_on);
+        let center = egui::pos2(circle_x, rect.center().y);
+        ui.painter()
+            .circle(center, 0.75 * radius, visuals.bg_fill, visuals.fg_stroke);
+    }
+
+    response
 }

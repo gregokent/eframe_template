@@ -5,7 +5,9 @@
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    let app = eframe_template::TemplateApp::default();
+    let mut app = eframe_template::DemoApp::default();
+    let outputs = vec![eframe_template::Output::default(); 10];
+    app.add_outputs(&outputs);
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(Box::new(app), native_options);
 }
